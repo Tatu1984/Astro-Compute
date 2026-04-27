@@ -36,12 +36,12 @@ SIGNS = [
     "Sagittarius", "Capricorn", "Aquarius", "Pisces",
 ]
 
-HOUSE_SYSTEM_CODES: dict[HouseSystem, str] = {
-    "PLACIDUS": "P",
-    "WHOLE_SIGN": "W",
-    "KOCH": "K",
-    "EQUAL": "E",
-    "VEDIC_EQUAL": "E",  # placeholder; refine when Vedic ayanamsha lands
+HOUSE_SYSTEM_CODES: dict[HouseSystem, bytes] = {
+    "PLACIDUS": b"P",
+    "WHOLE_SIGN": b"W",
+    "KOCH": b"K",
+    "EQUAL": b"E",
+    "VEDIC_EQUAL": b"E",  # placeholder; refine when Vedic ayanamsha lands
 }
 
 
