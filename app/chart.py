@@ -14,6 +14,8 @@ import swisseph as swe
 from .schemas import HouseSystem, NatalRequest, NatalResponse, PlanetPosition
 
 
+# Chiron and other asteroids need external SE data files (e.g. seas_18.se1)
+# which aren't bundled with pyswisseph. Add them when we ship ephemeris data.
 PLANETS = [
     ("Sun", swe.SUN),
     ("Moon", swe.MOON),
@@ -26,7 +28,6 @@ PLANETS = [
     ("Neptune", swe.NEPTUNE),
     ("Pluto", swe.PLUTO),
     ("MeanNode", swe.MEAN_NODE),
-    ("Chiron", swe.CHIRON),
 ]
 
 SIGNS = [
@@ -35,12 +36,12 @@ SIGNS = [
     "Sagittarius", "Capricorn", "Aquarius", "Pisces",
 ]
 
-HOUSE_SYSTEM_CODES: dict[HouseSystem, bytes] = {
-    "PLACIDUS": b"P",
-    "WHOLE_SIGN": b"W",
-    "KOCH": b"K",
-    "EQUAL": b"E",
-    "VEDIC_EQUAL": b"E",  # placeholder; refine when Vedic ayanamsha lands
+HOUSE_SYSTEM_CODES: dict[HouseSystem, str] = {
+    "PLACIDUS": "P",
+    "WHOLE_SIGN": "W",
+    "KOCH": "K",
+    "EQUAL": "E",
+    "VEDIC_EQUAL": "E",  # placeholder; refine when Vedic ayanamsha lands
 }
 
 
@@ -79,7 +80,10 @@ def compute_natal(req: NatalRequest) -> NatalResponse:
         dt.hour + dt.minute / 60 + dt.second / 3600,
     )
 
-    flags = swe.FLG_SWIEPH | swe.FLG_SPEED
+    # Use Moshier ephemeris (built-in, no .se1 data files needed). Accuracy
+    # is ~0.01° vs Swiss Ephemeris — well within tolerance for astrology.
+    # Switch to FLG_SWIEPH once we ship the SE data files in the image.
+    flags = swe.FLG_MOSEPH | swe.FLG_SPEED
 
     planets: list[PlanetPosition] = []
     cusps_raw, ascmc = swe.houses(

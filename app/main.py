@@ -1,11 +1,17 @@
+import logging
 import os
+import traceback
 from datetime import datetime, timezone
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException, status
 
 from .auth import require_shared_secret
 from .chart import compute_natal
 from .schemas import NatalRequest, NatalResponse
+
+
+logger = logging.getLogger("astro-compute")
+logging.basicConfig(level=logging.INFO)
 
 
 app = FastAPI(
@@ -31,4 +37,11 @@ def healthz() -> dict[str, object]:
     dependencies=[Depends(require_shared_secret)],
 )
 def natal(req: NatalRequest) -> NatalResponse:
-    return compute_natal(req)
+    try:
+        return compute_natal(req)
+    except Exception as exc:
+        logger.error("natal compute failed: %s\n%s", exc, traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"compute error: {type(exc).__name__}: {exc}",
+        ) from exc
