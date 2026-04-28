@@ -114,10 +114,61 @@ def _navamsa_sign(sidereal_deg: float) -> str:
     return SIGNS[nav_sign_idx]
 
 
+def _dasamsa_sign(sidereal_deg: float) -> str:
+    """D10 — career. 10 parts of 3°. Odd signs (Aries, Gemini, …) start
+    from the same sign; even signs start from the 9th (offset +8)."""
+    n = _norm(sidereal_deg)
+    sign_idx = int(n // 30)
+    pos_in_sign = n - sign_idx * 30
+    part_idx = int(pos_in_sign // 3.0)  # 0..9
+    is_odd = sign_idx % 2 == 0  # Aries (idx 0) is sign 1, hence odd
+    start = sign_idx if is_odd else (sign_idx + 8) % 12
+    return SIGNS[(start + part_idx) % 12]
+
+
+def _dvadasamsa_sign(sidereal_deg: float) -> str:
+    """D12 — parents. 12 parts of 2.5°. Always counts from the same sign."""
+    n = _norm(sidereal_deg)
+    sign_idx = int(n // 30)
+    pos_in_sign = n - sign_idx * 30
+    part_idx = int(pos_in_sign // 2.5)  # 0..11
+    return SIGNS[(sign_idx + part_idx) % 12]
+
+
+def _shashtiamsa_sign(sidereal_deg: float) -> str:
+    """D60 — past karma. 60 parts of 0.5°. Odd signs count forward; even
+    signs count backward."""
+    n = _norm(sidereal_deg)
+    sign_idx = int(n // 30)
+    pos_in_sign = n - sign_idx * 30
+    part_idx = int(pos_in_sign // 0.5)  # 0..59
+    is_odd = sign_idx % 2 == 0
+    target = (sign_idx + part_idx) % 12 if is_odd else (sign_idx + (59 - part_idx)) % 12
+    return SIGNS[target]
+
+
 def _whole_sign_house(planet_sign_idx: int, asc_sign_idx: int) -> int:
     # Whole-sign Vedic houses: H1 = sign of Ascendant; planets in same
     # sign go to H1, next sign to H2, etc.
     return ((planet_sign_idx - asc_sign_idx) % 12) + 1
+
+
+# ----------------------------------------------------------------
+# Yogini Dasha (8 yoginis, 36-year cycle)
+# ----------------------------------------------------------------
+
+YOGINI_NAMES = [
+    "Mangala",   # Moon, 1y
+    "Pingala",   # Sun, 2y
+    "Dhanya",    # Jupiter, 3y
+    "Bhramari",  # Mars, 4y
+    "Bhadrika",  # Mercury, 5y
+    "Ulka",      # Saturn, 6y
+    "Siddha",    # Venus, 7y
+    "Sankata",   # Rahu, 8y
+]
+YOGINI_LORDS = ["Moon", "Sun", "Jupiter", "Mars", "Mercury", "Saturn", "Venus", "Rahu"]
+YOGINI_YEARS = [1, 2, 3, 4, 5, 6, 7, 8]  # sums to 36
 
 
 # ----------------------------------------------------------------
@@ -127,6 +178,80 @@ def _whole_sign_house(planet_sign_idx: int, asc_sign_idx: int) -> int:
 def _years_to_timedelta(years: float) -> timedelta:
     # Vedic convention: 1 year = 365.25 days.
     return timedelta(days=years * 365.25)
+
+
+def _yogini_at(birth_utc: datetime, moon_long_sidereal: float, at: datetime) -> "DashaInfo":
+    """Walk the Yogini dasha sequence from birth until `at`. Starting
+    yogini = (Moon nakshatra index + 1) mod 8 (Mangala-from-Ashwini
+    convention). Remaining time of birth dasha mirrors Vimshottari's
+    fractional rule.
+    """
+    nak_idx = int(_norm(moon_long_sidereal) // NAK_DEG)
+    start_idx = (nak_idx + 1) % 8
+    within_nak = _norm(moon_long_sidereal) - nak_idx * NAK_DEG
+    fraction_remaining = (NAK_DEG - within_nak) / NAK_DEG
+    birth_remaining_years = YOGINI_YEARS[start_idx] * fraction_remaining
+
+    cur_start = birth_utc
+    cur_end = birth_utc + _years_to_timedelta(birth_remaining_years)
+    current_idx = start_idx
+
+    if cur_end >= at:
+        maha_idx = current_idx
+        maha_start = cur_start
+        maha_end = cur_end
+    else:
+        i = 1
+        while True:
+            cand_idx = (start_idx + i) % 8
+            cand_start = cur_end
+            cand_end = cand_start + _years_to_timedelta(YOGINI_YEARS[cand_idx])
+            if cand_end >= at:
+                maha_idx = cand_idx
+                maha_start = cand_start
+                maha_end = cand_end
+                break
+            cur_end = cand_end
+            i += 1
+
+    maha = DashaPeriod(
+        lord=f"{YOGINI_NAMES[maha_idx]} ({YOGINI_LORDS[maha_idx]})",
+        start=maha_start,
+        end=maha_end,
+    )
+
+    total_days = (maha_end - maha_start).total_seconds() / 86400.0
+    a_start = maha_start
+    a_end = a_start
+    a_idx = maha_idx
+    for k in range(8):
+        cand_idx = (maha_idx + k) % 8
+        cand_days = (YOGINI_YEARS[cand_idx] / 36.0) * total_days
+        cand_end = a_start + timedelta(days=cand_days)
+        if cand_end >= at:
+            a_idx = cand_idx
+            a_end = cand_end
+            break
+        a_start = cand_end
+    antar = DashaPeriod(
+        lord=f"{YOGINI_NAMES[a_idx]} ({YOGINI_LORDS[a_idx]})",
+        start=a_start,
+        end=a_end,
+    )
+
+    upcoming: list[DashaPeriod] = []
+    cursor = maha_end
+    for k in range(1, 4):
+        u_idx = (maha_idx + k) % 8
+        u_end = cursor + _years_to_timedelta(YOGINI_YEARS[u_idx])
+        upcoming.append(DashaPeriod(
+            lord=f"{YOGINI_NAMES[u_idx]} ({YOGINI_LORDS[u_idx]})",
+            start=cursor,
+            end=u_end,
+        ))
+        cursor = u_end
+
+    return DashaInfo(mahadasha=maha, antardasha=antar, upcoming_mahadashas=upcoming)
 
 
 def _vimshottari_at(birth_utc: datetime, moon_long_sidereal: float, at: datetime) -> DashaInfo:
@@ -239,7 +364,6 @@ def compute_vedic(req: VedicRequest) -> VedicResponse:
         long_sid = _norm(long_sid)
         sign_idx, sign = _sign_for(long_sid)
         nak_idx, nak, pada, nak_lord = _nakshatra_for(long_sid)
-        nav_sign = _navamsa_sign(long_sid)
         house = _whole_sign_house(sign_idx, asc_sign_idx)
 
         if name == "Moon":
@@ -259,7 +383,10 @@ def compute_vedic(req: VedicRequest) -> VedicResponse:
             nakshatra_lord=nak_lord,
             speed_deg_per_day=lon_speed,
             retrograde=lon_speed < 0,
-            navamsa_sign=nav_sign,
+            navamsa_sign=_navamsa_sign(long_sid),
+            dasamsa_sign=_dasamsa_sign(long_sid),
+            dvadasamsa_sign=_dvadasamsa_sign(long_sid),
+            shashtiamsa_sign=_shashtiamsa_sign(long_sid),
         ))
 
     # Ketu = Rahu + 180°. Compose its row from Rahu's data.
@@ -267,7 +394,6 @@ def compute_vedic(req: VedicRequest) -> VedicResponse:
     ketu_long = _norm(rahu.sidereal_long + 180)
     ketu_sign_idx, ketu_sign = _sign_for(ketu_long)
     ketu_nak_idx, ketu_nak, ketu_pada, ketu_nak_lord = _nakshatra_for(ketu_long)
-    ketu_nav = _navamsa_sign(ketu_long)
     planets.append(VedicPlanetPosition(
         name="Ketu",
         sidereal_long=ketu_long,
@@ -280,13 +406,17 @@ def compute_vedic(req: VedicRequest) -> VedicResponse:
         nakshatra_lord=ketu_nak_lord,
         speed_deg_per_day=-rahu.speed_deg_per_day,
         retrograde=not rahu.retrograde,
-        navamsa_sign=ketu_nav,
+        navamsa_sign=_navamsa_sign(ketu_long),
+        dasamsa_sign=_dasamsa_sign(ketu_long),
+        dvadasamsa_sign=_dvadasamsa_sign(ketu_long),
+        shashtiamsa_sign=_shashtiamsa_sign(ketu_long),
     ))
 
-    # Vimshottari Dasha — current periods at *now* (so the user sees
-    # what's active for them today, not what was active at birth).
+    # Vimshottari + Yogini dashas — current periods at *now*.
     now = datetime.now(timezone.utc)
-    dasha = _vimshottari_at(req.birth_datetime_utc.astimezone(timezone.utc), moon_sid_long, now)
+    birth_aware = req.birth_datetime_utc.astimezone(timezone.utc)
+    dasha = _vimshottari_at(birth_aware, moon_sid_long, now)
+    yogini_dasha = _yogini_at(birth_aware, moon_sid_long, now)
 
     # Manglik check: Mars in 1, 2, 4, 7, 8, 12 houses from Lagna.
     is_manglik = False
@@ -304,6 +434,7 @@ def compute_vedic(req: VedicRequest) -> VedicResponse:
         ascendant_sign=asc_sign,
         planets=planets,
         dasha=dasha,
+        yogini_dasha=yogini_dasha,
         is_manglik=is_manglik,
         manglik_reason=manglik_reason,
     )
