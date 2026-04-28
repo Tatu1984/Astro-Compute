@@ -11,7 +11,14 @@ from datetime import datetime, timezone
 
 import swisseph as swe
 
-from .schemas import HouseSystem, NatalRequest, NatalResponse, PlanetPosition
+from .schemas import (
+    HouseSystem,
+    NatalRequest,
+    NatalResponse,
+    PlanetPosition,
+    TransitRequest,
+    TransitResponse,
+)
 
 
 # Chiron and other asteroids need external SE data files (e.g. seas_18.se1)
@@ -117,4 +124,42 @@ def compute_natal(req: NatalRequest) -> NatalResponse:
         houses=cusps,
         ascendant_deg=ascmc[0],
         midheaven_deg=ascmc[1],
+    )
+
+
+def compute_transit(req: TransitRequest) -> TransitResponse:
+    """Snapshot of where each planet sits at the requested moment.
+
+    No house cusps — transits are typically overlaid on the *natal* houses
+    by the caller (a transit "by itself" doesn't have a meaningful house
+    system without a subject's birth coordinates).
+    """
+    dt = req.moment_utc.astimezone(timezone.utc)
+    jd = swe.julday(
+        dt.year,
+        dt.month,
+        dt.day,
+        dt.hour + dt.minute / 60 + dt.second / 3600,
+    )
+    flags = swe.FLG_MOSEPH | swe.FLG_SPEED
+
+    planets: list[PlanetPosition] = []
+    for name, code in PLANETS:
+        result, _ret = swe.calc_ut(jd, code, flags)
+        lon, lat, _dist, lon_speed, _lat_speed, _dist_speed = result
+        planets.append(
+            PlanetPosition(
+                name=name,
+                longitude_deg=lon % 360,
+                latitude_deg=lat,
+                speed_deg_per_day=lon_speed,
+                sign=_sign_for(lon),
+                house=None,
+            )
+        )
+
+    return TransitResponse(
+        computed_at=datetime.now(timezone.utc),
+        moment_utc=dt,
+        planets=planets,
     )

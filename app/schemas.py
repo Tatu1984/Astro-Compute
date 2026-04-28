@@ -38,3 +38,15 @@ class NatalResponse(BaseModel):
     houses: list[float]  # 12 cusps in degrees
     ascendant_deg: float
     midheaven_deg: float
+
+
+class TransitRequest(BaseModel):
+    """Snapshot of where the planets are at a given moment."""
+    moment_utc: datetime = Field(description="Timestamp to compute the planet positions at.")
+
+
+class TransitResponse(BaseModel):
+    schema_version: str = "1"
+    computed_at: datetime
+    moment_utc: datetime
+    planets: list[PlanetPosition]

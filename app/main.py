@@ -6,8 +6,8 @@ from datetime import datetime, timezone
 from fastapi import Depends, FastAPI, HTTPException, status
 
 from .auth import require_shared_secret
-from .chart import compute_natal
-from .schemas import NatalRequest, NatalResponse
+from .chart import compute_natal, compute_transit
+from .schemas import NatalRequest, NatalResponse, TransitRequest, TransitResponse
 
 
 logger = logging.getLogger("astro-compute")
@@ -41,6 +41,22 @@ def natal(req: NatalRequest) -> NatalResponse:
         return compute_natal(req)
     except Exception as exc:
         logger.error("natal compute failed: %s\n%s", exc, traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"compute error: {type(exc).__name__}: {exc}",
+        ) from exc
+
+
+@app.post(
+    "/transit",
+    response_model=TransitResponse,
+    dependencies=[Depends(require_shared_secret)],
+)
+def transit(req: TransitRequest) -> TransitResponse:
+    try:
+        return compute_transit(req)
+    except Exception as exc:
+        logger.error("transit compute failed: %s\n%s", exc, traceback.format_exc())
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"compute error: {type(exc).__name__}: {exc}",
