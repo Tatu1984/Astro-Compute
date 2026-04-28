@@ -7,7 +7,15 @@ from fastapi import Depends, FastAPI, HTTPException, status
 
 from .auth import require_shared_secret
 from .chart import compute_natal, compute_transit
-from .schemas import NatalRequest, NatalResponse, TransitRequest, TransitResponse
+from .schemas import (
+    NatalRequest,
+    NatalResponse,
+    TransitRequest,
+    TransitResponse,
+    VedicRequest,
+    VedicResponse,
+)
+from .vedic import compute_vedic
 
 
 logger = logging.getLogger("astro-compute")
@@ -57,6 +65,22 @@ def transit(req: TransitRequest) -> TransitResponse:
         return compute_transit(req)
     except Exception as exc:
         logger.error("transit compute failed: %s\n%s", exc, traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"compute error: {type(exc).__name__}: {exc}",
+        ) from exc
+
+
+@app.post(
+    "/vedic",
+    response_model=VedicResponse,
+    dependencies=[Depends(require_shared_secret)],
+)
+def vedic(req: VedicRequest) -> VedicResponse:
+    try:
+        return compute_vedic(req)
+    except Exception as exc:
+        logger.error("vedic compute failed: %s\n%s", exc, traceback.format_exc())
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"compute error: {type(exc).__name__}: {exc}",
