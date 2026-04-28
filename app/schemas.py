@@ -76,7 +76,10 @@ class VedicPlanetPosition(BaseModel):
     nakshatra_lord: str
     speed_deg_per_day: float
     retrograde: bool
-    navamsa_sign: str
+    navamsa_sign: str          # D9 — marriage/dharma
+    dasamsa_sign: str          # D10 — career
+    dvadasamsa_sign: str       # D12 — parents
+    shashtiamsa_sign: str      # D60 — past karma
 
 
 class DashaPeriod(BaseModel):
@@ -99,6 +102,7 @@ class VedicResponse(BaseModel):
     sidereal_ascendant: float
     ascendant_sign: str
     planets: list[VedicPlanetPosition]
-    dasha: DashaInfo
+    dasha: DashaInfo               # Vimshottari (120-year cycle)
+    yogini_dasha: DashaInfo         # Yogini (36-year cycle)
     is_manglik: bool
     manglik_reason: str
